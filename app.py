@@ -1,109 +1,75 @@
-import csv
-import os
-
-
-import tkinter as tk
-from tkinter import ttk, messagebox
+import sys
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QLineEdit, QTableWidget, QTableWidgetItem
 from datetime import datetime
 
 shifts = []
 
-CSV_FILE = "shifts.csv"
+class ShiftPlanner(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Shift & Study Planner")
+        self.setGeometry(200, 200, 700, 450)
 
-def save_shifts():
-    with open(CSV_FILE, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["type", "start", "end", "duration"])  # header
-        for s in shifts:
-            writer.writerow([s["type"], s["start"].strftime("%Y-%m-%d %H:%M"),
-                             s["end"].strftime("%Y-%m-%d %H:%M"), s["duration"]])
+        # Main layout
+        layout = QVBoxLayout()
 
-def load_shifts():
-    if not os.path.exists(CSV_FILE):
-        return
-    with open(CSV_FILE, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            shifts.append({
-                "type": row["type"],
-                "start": datetime.strptime(row["start"], "%Y-%m-%d %H:%M"),
-                "end": datetime.strptime(row["end"], "%Y-%m-%d %H:%M"),
-                "duration": int(row["duration"])
-            })
+        # --- Input row ---
+        input_row = QHBoxLayout()
+        self.type_box = QComboBox()
+        self.type_box.addItems(["Work", "Study"])
 
+        self.start_input = QLineEdit("YYYY-MM-DD HH:MM")
+        self.end_input = QLineEdit("YYYY-MM-DD HH:MM")
 
-def add_shift():
-    try:
-        shift_type = type_var.get()
-        start_time = datetime.strptime(start_entry.get(), "%Y-%m-%d %H:%M")
-        end_time = datetime.strptime(end_entry.get(), "%Y-%m-%d %H:%M")
-        duration = int((end_time - start_time).seconds / 3600)
+        add_btn = QPushButton("Add Shift")
+        add_btn.clicked.connect(self.add_shift)
 
-        shifts.append({"type": shift_type, "start": start_time, "end": end_time, "duration": duration})
-        update_table()
-        update_summary()
-        save_shifts()
+        input_row.addWidget(self.type_box)
+        input_row.addWidget(self.start_input)
+        input_row.addWidget(self.end_input)
+        input_row.addWidget(add_btn)
 
+        layout.addLayout(input_row)
 
-        start_entry.delete(0, tk.END)
-        end_entry.delete(0, tk.END)
+        # --- Table ---
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Type", "Start", "End", "Duration"])
+        layout.addWidget(self.table)
 
-    except Exception as e:
-        messagebox.showerror("Error", "Please use format YYYY-MM-DD HH:MM")
+        # --- Summary ---
+        self.summary_label = QLabel("Total Work Hours: 0 | Total Study Hours: 0")
+        layout.addWidget(self.summary_label)
 
-def update_table():
-    for row in table.get_children():
-        table.delete(row)
+        self.setLayout(layout)
 
-    for s in shifts:
-        table.insert("", tk.END, values=(s["type"], s["start"].strftime("%Y-%m-%d %H:%M"),
-                                         s["end"].strftime("%Y-%m-%d %H:%M"), s["duration"]))
+    def add_shift(self):
+        try:
+            shift_type = self.type_box.currentText()
+            start = datetime.strptime(self.start_input.text(), "%Y-%m-%d %H:%M")
+            end = datetime.strptime(self.end_input.text(), "%Y-%m-%d %H:%M")
+            duration = int((end - start).seconds / 3600)
 
-def update_summary():
-    work_hours = sum(s["duration"] for s in shifts if s["type"] == "Work")
-    study_hours = sum(s["duration"] for s in shifts if s["type"] == "Study")
-    summary_label.config(text=f"Total Work Hours: {work_hours} | Total Study Hours: {study_hours}")
+            shifts.append({"type": shift_type, "start": start, "end": end, "duration": duration})
+            self.update_table()
+            self.update_summary()
+        except Exception:
+            self.summary_label.setText("⚠️ Invalid input! Use YYYY-MM-DD HH:MM")
 
-# --- GUI Setup ---
-root = tk.Tk()
-root.title("Shift & Study Planner")
-root.geometry("650x400")
+    def update_table(self):
+        self.table.setRowCount(len(shifts))
+        for i, s in enumerate(shifts):
+            self.table.setItem(i, 0, QTableWidgetItem(s["type"]))
+            self.table.setItem(i, 1, QTableWidgetItem(s["start"].strftime("%Y-%m-%d %H:%M")))
+            self.table.setItem(i, 2, QTableWidgetItem(s["end"].strftime("%Y-%m-%d %H:%M")))
+            self.table.setItem(i, 3, QTableWidgetItem(str(s["duration"])))
 
-frame = tk.Frame(root)
-frame.pack(pady=10)
+    def update_summary(self):
+        work_hours = sum(s["duration"] for s in shifts if s["type"] == "Work")
+        study_hours = sum(s["duration"] for s in shifts if s["type"] == "Study")
+        self.summary_label.setText(f"Total Work Hours: {work_hours} | Total Study Hours: {study_hours}")
 
-# Type dropdown
-type_var = tk.StringVar(value="Work")
-type_menu = ttk.Combobox(frame, textvariable=type_var, values=["Work", "Study"])
-type_menu.grid(row=0, column=0, padx=5)
-
-# Start + End entries
-start_entry = tk.Entry(frame)
-start_entry.insert(0, "YYYY-MM-DD HH:MM")
-start_entry.grid(row=0, column=1, padx=5)
-
-end_entry = tk.Entry(frame)
-end_entry.insert(0, "YYYY-MM-DD HH:MM")
-end_entry.grid(row=0, column=2, padx=5)
-
-# Add button
-add_button = tk.Button(frame, text="Add Shift", command=add_shift)
-add_button.grid(row=0, column=3, padx=5)
-
-# Table
-columns = ("Type", "Start", "End", "Duration")
-table = ttk.Treeview(root, columns=columns, show="headings", height=10)
-for col in columns:
-    table.heading(col, text=col)
-table.pack(pady=10, fill="x")
-
-# Summary
-summary_label = tk.Label(root, text="Total Work Hours: 0 | Total Study Hours: 0")
-summary_label.pack(pady=10)
-
-load_shifts()
-update_table()
-update_summary()
-
-
-root.mainloop()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ShiftPlanner()
+    window.show()
+    sys.exit(app.exec_())
