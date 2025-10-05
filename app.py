@@ -2,7 +2,7 @@ import sys
 import csv, os
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QComboBox, QDateTimeEdit, QTableWidget, QTableWidgetItem
+    QLabel, QComboBox, QDateTimeEdit, QDateEdit, QTableWidget, QTableWidgetItem
 )
 from datetime import datetime
 
@@ -13,12 +13,12 @@ class ShiftPlanner(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Shift & Study Planner")
-        self.setGeometry(200, 200, 700, 450)
+        self.setGeometry(200, 200, 800, 500)
 
         # main layout
         layout = QVBoxLayout()
 
-        # --- input row ---
+        # --- input row (add/delete) ---
         input_row = QHBoxLayout()
         self.type_box = QComboBox()
         self.type_box.addItems(["Work", "Study"])
@@ -43,6 +43,39 @@ class ShiftPlanner(QWidget):
         input_row.addWidget(add_btn)
         input_row.addWidget(delete_btn)
         layout.addLayout(input_row)
+
+        # --- filter row ---
+        filter_row = QHBoxLayout()
+
+        # type filter
+        filter_label = QLabel("Filter:")
+        self.filter_box = QComboBox()
+        self.filter_box.addItems(["All", "Work", "Study"])
+        self.filter_box.currentTextChanged.connect(lambda: self.update_table())
+
+        # date range filter
+        date_label = QLabel("From:")
+        self.start_filter = QDateEdit()
+        self.start_filter.setDisplayFormat("yyyy-MM-dd")
+        self.start_filter.setCalendarPopup(True)
+
+        end_label = QLabel("To:")
+        self.end_filter = QDateEdit()
+        self.end_filter.setDisplayFormat("yyyy-MM-dd")
+        self.end_filter.setCalendarPopup(True)
+
+        apply_filter_btn = QPushButton("Apply Filter")
+        apply_filter_btn.clicked.connect(self.update_table)
+
+        filter_row.addWidget(filter_label)
+        filter_row.addWidget(self.filter_box)
+        filter_row.addWidget(date_label)
+        filter_row.addWidget(self.start_filter)
+        filter_row.addWidget(end_label)
+        filter_row.addWidget(self.end_filter)
+        filter_row.addWidget(apply_filter_btn)
+
+        layout.addLayout(filter_row)
 
         # --- table ---
         self.table = QTableWidget(0, 4)
@@ -74,7 +107,6 @@ class ShiftPlanner(QWidget):
 
     # load shifts from csv if exists
     def load_shifts(self):
-        # skip if file doesn't exist or is empty
         if not os.path.exists("shifts.csv") or os.path.getsize("shifts.csv") == 0:
             return
 
@@ -107,31 +139,46 @@ class ShiftPlanner(QWidget):
             })
             self.update_table()
             self.update_summary()
-            self.save_shifts()  # save after every new shift
+            self.save_shifts()
         except Exception:
             self.summary_label.setText("⚠️ Invalid input! Please check your dates.")
 
     def delete_shift(self):
-        # get the selected rows
         rows = sorted({i.row() for i in self.table.selectedIndexes()}, reverse=True)
-
-        # remove them from shifts list
         for r in rows:
             if 0 <= r < len(shifts):
                 shifts.pop(r)
-
-        # refresh UI and save to CSV
         self.update_table()
         self.update_summary()
         self.save_shifts()
 
     def update_table(self):
-        self.table.setRowCount(len(shifts))
-        for i, s in enumerate(shifts):
+        # get type filter
+        filter_type = self.filter_box.currentText() if hasattr(self, "filter_box") else "All"
+
+        # get date range filters (optional)
+        start_date = self.start_filter.date().toPyDate() if hasattr(self, "start_filter") else None
+        end_date = self.end_filter.date().toPyDate() if hasattr(self, "end_filter") else None
+
+        filtered_shifts = []
+        for s in shifts:
+            if filter_type != "All" and s["type"] != filter_type:
+                continue
+            if start_date and s["start"].date() < start_date:
+                continue
+            if end_date and s["end"].date() > end_date:
+                continue
+            filtered_shifts.append(s)
+
+        # populate table
+        self.table.setRowCount(len(filtered_shifts))
+        for i, s in enumerate(filtered_shifts):
             self.table.setItem(i, 0, QTableWidgetItem(s["type"]))
             self.table.setItem(i, 1, QTableWidgetItem(s["start"].strftime("%Y-%m-%d %H:%M")))
             self.table.setItem(i, 2, QTableWidgetItem(s["end"].strftime("%Y-%m-%d %H:%M")))
             self.table.setItem(i, 3, QTableWidgetItem(str(s["duration"])))
+
+        self.update_summary()
 
     def update_summary(self):
         work_hours = sum(s["duration"] for s in shifts if s["type"] == "Work")
