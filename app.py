@@ -1,4 +1,5 @@
 import sys
+import csv, os
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QComboBox, QDateTimeEdit, QTableWidget, QTableWidgetItem
@@ -37,7 +38,6 @@ class ShiftPlanner(QWidget):
         input_row.addWidget(self.start_input)
         input_row.addWidget(self.end_input)
         input_row.addWidget(add_btn)
-
         layout.addLayout(input_row)
 
         # --- table ---
@@ -50,6 +50,42 @@ class ShiftPlanner(QWidget):
         layout.addWidget(self.summary_label)
 
         self.setLayout(layout)
+
+        # load saved shifts from csv when starting
+        self.load_shifts()
+
+    # save all shifts to csv
+    def save_shifts(self):
+        with open("shifts.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Type", "Start", "End", "Duration"])
+            for s in shifts:
+                writer.writerow([
+                    s["type"],
+                    s["start"].strftime("%Y-%m-%d %H:%M"),
+                    s["end"].strftime("%Y-%m-%d %H:%M"),
+                    s["duration"]
+                ])
+
+    # load shifts from csv if exists
+    def load_shifts(self):
+        # skip if file doesn't exist or is empty
+        if not os.path.exists("shifts.csv") or os.path.getsize("shifts.csv") == 0:
+            return
+
+        with open("shifts.csv", "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if not all(k in row for k in ("Type", "Start", "End", "Duration")):
+                    continue
+                shifts.append({
+                    "type": row["Type"],
+                    "start": datetime.strptime(row["Start"], "%Y-%m-%d %H:%M"),
+                    "end": datetime.strptime(row["End"], "%Y-%m-%d %H:%M"),
+                    "duration": int(row["Duration"])
+                })
+        self.update_table()
+        self.update_summary()
 
     def add_shift(self):
         try:
@@ -66,6 +102,7 @@ class ShiftPlanner(QWidget):
             })
             self.update_table()
             self.update_summary()
+            self.save_shifts()  # save after every new shift
         except Exception:
             self.summary_label.setText("⚠️ Invalid input! Please check your dates.")
 
