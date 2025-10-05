@@ -34,15 +34,20 @@ class ShiftPlanner(QWidget):
         add_btn = QPushButton("Add Shift")
         add_btn.clicked.connect(self.add_shift)
 
+        delete_btn = QPushButton("Delete Selected")
+        delete_btn.clicked.connect(self.delete_shift)
+
         input_row.addWidget(self.type_box)
         input_row.addWidget(self.start_input)
         input_row.addWidget(self.end_input)
         input_row.addWidget(add_btn)
+        input_row.addWidget(delete_btn)
         layout.addLayout(input_row)
 
         # --- table ---
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Type", "Start", "End", "Duration"])
+        self.table.setSelectionBehavior(self.table.SelectRows)
         layout.addWidget(self.table)
 
         # --- summary ---
@@ -105,6 +110,20 @@ class ShiftPlanner(QWidget):
             self.save_shifts()  # save after every new shift
         except Exception:
             self.summary_label.setText("⚠️ Invalid input! Please check your dates.")
+
+    def delete_shift(self):
+        # get the selected rows
+        rows = sorted({i.row() for i in self.table.selectedIndexes()}, reverse=True)
+
+        # remove them from shifts list
+        for r in rows:
+            if 0 <= r < len(shifts):
+                shifts.pop(r)
+
+        # refresh UI and save to CSV
+        self.update_table()
+        self.update_summary()
+        self.save_shifts()
 
     def update_table(self):
         self.table.setRowCount(len(shifts))
